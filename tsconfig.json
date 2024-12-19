@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+      "target": "ES2022",
+      "module": "ESNext",
+      "lib": ["ES2022", "DOM"],
+      "strict": true,
+      "jsx": "react",            // JSX構文をReact対応に
+      "esModuleInterop": true,  // import文の互換性設定
+      "allowSyntheticDefaultImports": true, // default importを許可
+      "moduleResolution": "node", // node_modulesからの解決
+      "isolatedModules": true,
+      "resolveJsonModule": true,
+      "noEmit": true
+    },
+    "include": ["src/**/*"]
+  }
+  

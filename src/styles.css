@@ -1,0 +1,35 @@
+.tray-container {
+    border: 2px solid;
+    padding: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+  }
+  
+  .tray-header {
+    display: flex;
+    align-items: center;
+  }
+  
+  .fold-button {
+    margin-right: 5px;
+    display: flex;
+    cursor: pointer;
+  }
+  
+  .tray-title {
+    font-weight: bold;
+    flex-grow: 1;
+    cursor: text;
+  }
+  
+  .modified-time {
+    margin-left: 10px;
+    font-size: 0.8em;
+    color: #666;
+  }
+  
+  .tray-children {
+    margin-left: 20px;
+    margin-top: 5px;
+  }
+  
