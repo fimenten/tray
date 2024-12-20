@@ -1,10 +1,10 @@
 {
-    "id": "tray",
+    "id": "traying",
     "name": "tray",
     "version": "1.0.0",
     "minAppVersion": "0.12.0",
-    "description": "A minimal Obsidian plugin using React.",
-    "author": "Your Name",
+    "description": "My favorite UI tray.",
+    "author": "fimenten",
     "authorUrl": "https://example.com",
     "isDesktopOnly": false
   }

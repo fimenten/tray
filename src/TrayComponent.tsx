@@ -36,7 +36,6 @@ const TrayComponent: React.FC<Props> = ({
   const init = tray.editingStart
   const [isEditing, setIsEditing] = useState(init);
 
-
   const [currentName, setCurrentName] = useState(tray.name);
   const titleRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -51,6 +50,9 @@ const TrayComponent: React.FC<Props> = ({
     const updatedTray: Tray = { ...tray, ...partial, lastModified: Date.now() };
     onUpdate(updatedTray);
   };
+  if (init){
+    updateTray({editingStart:false})
+  }
 
   const finishEditing = () => {
     setIsEditing(false);
