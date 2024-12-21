@@ -1,15 +1,22 @@
-export interface Tray {
+export interface TrayData {
     uuid: string;
     name: string;
-    isFolded: boolean;
     borderColor: string;
-    children: string[];
+    childrenUUids: string[];
     lastModified: number;
     metaData: Record<string, any>;
-    parentUuid: string | null; // added parentUuid
-    deleted:boolean|null
+    // parentUuid: string[] | null
     main:string|null
-    flexDirection:"row"|"column"
-    editingStart:boolean
   }
   
+export interface Tray{
+  parentId : string|null
+  parentViewId:string|null
+  viewUUid : string
+  trayData :TrayData
+  isFolded :boolean
+  flexDirection:"row"|"column"
+  editingStart:boolean
+
+  // flexDirection:
+}

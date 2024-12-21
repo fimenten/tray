@@ -1,7 +1,7 @@
 import { Plugin, ItemView, WorkspaceLeaf, App } from "obsidian";
 import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { Tray } from "./trayModel";
+import { Tray, TrayData } from "./trayModel";
 import { loadTrayFromNote, saveTrayToNote, ensureTrayFolder } from "./trayIO";
 import TrayComponent from "./TrayComponent";
 
@@ -16,29 +16,34 @@ function TrayRootView({ app }: { app: App }) {
       await ensureTrayFolder(app);
       let loaded = await loadTrayFromNote(app, ROOT_TRAY_UUID);
       if (!loaded) {
-        loaded = {
-          uuid: ROOT_TRAY_UUID,
+        const data :TrayData = {
+          uuid:ROOT_TRAY_UUID,
           name: "Root Tray",
-          isFolded: false,
           borderColor: "#ccc",
-          children: [],
+          childrenUUids: [],
           lastModified: Date.now(),
           metaData: {},
-          parentUuid: null,
-          deleted: null,
           main: null,
+        }
+        loaded = {
+          viewUUid: ROOT_TRAY_UUID,
+          parentId:null,
+          parentViewId:null,
+          trayData:data,
+          isFolded: false,
           flexDirection: "row",
           editingStart:false
+
         };
-        await saveTrayToNote(app, loaded);
+        await saveTrayToNote(app, data);
       }
       setTray(loaded);
-      setFocusUuid(loaded.uuid);
+      setFocusUuid(loaded.viewUUid);
     })();
   }, [app]);
 
   const handleUpdate = async (updatedTray: Tray) => {
-    await saveTrayToNote(app, updatedTray);
+    await saveTrayToNote(app, updatedTray.trayData);
     // After saving, reload the root tray to reflect changes in the entire hierarchy
     const reloadedRoot = await loadTrayFromNote(app, ROOT_TRAY_UUID);
     if (reloadedRoot) {
@@ -47,7 +52,7 @@ function TrayRootView({ app }: { app: App }) {
   };
 
   const onChildUpdate = async (child: Tray) => {
-    await saveTrayToNote(app, child);
+    await saveTrayToNote(app, child.trayData);
   };
 
   const loadTrayFn = async (uuid: string) => {

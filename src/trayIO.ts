@@ -1,5 +1,5 @@
 import { App, TFile } from "obsidian";
-import { Tray } from "./trayModel";
+import { Tray, TrayData } from "./trayModel";
 
 const TRAY_FOLDER = "trays";
 
@@ -10,7 +10,7 @@ export async function ensureTrayFolder(app: App) {
   }
 }
 
-export async function saveTrayToNote(app: App, tray: Tray): Promise<void> {
+export async function saveTrayToNote(app: App, tray: TrayData): Promise<void> {
   const content = JSON.stringify(tray, null, 2);
   const filePath = `${TRAY_FOLDER}/${tray.uuid}.md`;
   await ensureTrayFolder(app);

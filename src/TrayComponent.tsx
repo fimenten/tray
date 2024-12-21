@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Tray } from "./trayModel";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { Tray, TrayData } from "./trayModel";
 
 interface Props {
   tray: Tray;
@@ -20,149 +20,128 @@ function getRandomColor(): string {
   return color;
 }
 
-const TrayComponent: React.FC<Props> = ({
+const TrayComponent: React.FC<Props> = React.memo(({
   tray,
   onUpdate,
   loadTray,
-  onChildUpdate,　
+  onChildUpdate,
   focusUuid,
   setFocusUuid,
-  // editingStart,
 }) => {
-  // If the tray is marked as deleted, do not render it
-  if (tray.deleted) {
-    return null;
-  }
-  const init = tray.editingStart
-  const [isEditing, setIsEditing] = useState(init);
 
-  const [currentName, setCurrentName] = useState(tray.name);
+
+  const init = tray.editingStart;
+  const [isEditing, setIsEditing] = useState(init);
+  const [currentName, setCurrentName] = useState(tray.trayData.name);
   const titleRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-
-  // Initialize flexDirection from tray or default to "row"
   const [flexDirection, setFlexDirection] = useState<"row"|"column">(tray.flexDirection || "row");
-
   const [childrenTrays, setChildrenTrays] = useState<Tray[] | null>(null);
-
-
-  const updateTray = (partial: Partial<Tray>) => {
-    const updatedTray: Tray = { ...tray, ...partial, lastModified: Date.now() };
+  
+  const updateTray = useCallback((partial: Partial<Tray>) => {
+    const updatedTray: Tray = { ...tray, ...partial,};
     onUpdate(updatedTray);
-  };
-  if (init){
-    updateTray({editingStart:false})
-  }
+  }, [tray, onUpdate]);
 
-  const finishEditing = () => {
+  const updateTrayData = useCallback((partial:Partial<TrayData>)=>{
+    const updatedTrayData :TrayData = {...tray.trayData,...partial,};
+    updateTray({trayData:updatedTrayData});
+    },[tray.trayData,updateTray]
+  )
+
+
+
+
+
+
+
+  useEffect(() => {
+    if (init) {
+      updateTray({editingStart:false});
+    }
+  }, [init, updateTray]);
+
+  const finishEditing = useCallback(() => {
     setIsEditing(false);
-    updateTray({editingStart:false})
+    updateTray({editingStart:false});
     if (titleRef.current) {
       let newText = titleRef.current.textContent || "";
-      if (newText === tray.uuid){
-        newText = "";
-      }
-      if (newText !== tray.name) {
-        updateTray({ name: newText });
+      if (newText !== tray.trayData.name) {
+        updateTrayData({ name: newText });
         setCurrentName(newText);
       }
     }
 
-    // After finishing editing, return focus to the container
     if (containerRef.current) {
       containerRef.current.focus();
     }
-  };
+  }, [tray.trayData.uuid, tray.trayData.name, updateTrayData]);
 
-  const toggleFold = () => {
+  const toggleFold = useCallback(() => {
     updateTray({ isFolded: !tray.isFolded });
-  };
+  }, [tray.isFolded, updateTray]);
 
-  const toggleEditMode = () => {
+  const toggleEditMode = useCallback(() => {
     setIsEditing(true);
-  };
-  // if (tray.editingStart){toggleEditMode()}
+  }, []);
 
-  const addChild = async () => {
+  const addChild = useCallback(async () => {
     if (isEditing) return;
     const newUuid = crypto.randomUUID();
-    const newChild: Tray = {
+    const newChildData: TrayData = {
       uuid: newUuid,
       name: "",
-      isFolded: false,
       borderColor: "#ccc",
-      children: [],
+      childrenUUids: [],
       lastModified: Date.now(),
       metaData: {},
-      parentUuid: tray.uuid,
-      deleted: null,
       main: null,
-      flexDirection: "column",
-      editingStart:true
     };
+    const newViewUUid = crypto.randomUUID()
+    const newChild :Tray = {trayData:newChildData,isFolded:false,editingStart:true,viewUUid:newViewUUid,parentId:tray.trayData.uuid,parentViewId:tray.viewUUid,flexDirection:"column"}
+
     await onChildUpdate(newChild);
-    updateTray({ children: [newUuid, ...tray.children], isFolded: false,editingStart:true });
+    updateTrayData({ childrenUUids: [newUuid, ...tray.trayData.childrenUUids]})
+    updateTray({isFolded:false});
     setFocusUuid(newUuid);
-    // updateTray({editingStart:true})
-  };
+  }, [isEditing, onChildUpdate, updateTray, tray.trayData.childrenUUids, setFocusUuid]);
 
   useEffect(() => {
-    if (tray.children.length > 0 && tray.borderColor === "#ccc") {
-      updateTray({ borderColor: getRandomColor() });
+    if (tray.trayData.childrenUUids.length > 0 && tray.trayData.borderColor === "#ccc") {
+      updateTrayData({ borderColor: getRandomColor() });
     }
-  }, [tray.children, tray.borderColor, updateTray]);
-
-  // useEffect(() => {
-  //   if (isEditing && titleRef.current) {
-  //     titleRef.current.focus();
-  //     const selection = window.getSelection();
-  //     const range = document.createRange();
-  //     range.selectNodeContents(titleRef.current);
-  //     if (selection) {
-  //       selection.removeAllRanges();
-  //       selection.addRange(range);
-  //     }
-  //   } else if (titleRef.current) {
-  //     titleRef.current.textContent = currentName;
-  //   }
-  // }, [isEditing, currentName]);
+  }, [tray.trayData.childrenUUids.length, tray.trayData.borderColor, updateTray]);
 
   useEffect(() => {
-    if (focusUuid === tray.uuid && containerRef.current) {
+    if (focusUuid === tray.viewUUid && containerRef.current) {
       if (isEditing){
         titleRef.current?.focus();
-      }
-      else{
+      } else {
         containerRef.current.focus();
-
       }
     }
-  }, [focusUuid, tray.uuid]);
-
-  const lastModifiedDate = new Date(tray.lastModified).toLocaleString();
+  }, [focusUuid, tray.viewUUid, isEditing]);
 
   useEffect(() => {
-    if (focusUuid === tray.uuid && tray.name === tray.uuid) {
+    if (focusUuid === tray.viewUUid) {
       setIsEditing(true);
     }
-  }, [focusUuid, tray.name, tray.uuid]);
+  }, [focusUuid, tray.trayData.name, tray.viewUUid]);
 
   useEffect(() => {
     (async () => {
-      if (tray.children.length === 0) {
+      if (tray.trayData.childrenUUids.length === 0) {
         setChildrenTrays([]);
         return;
       }
-      const loaded: Tray[] = [];
-      for (const uuid of tray.children) {
-        const childTray = await loadTray(uuid);
-        if (childTray && !childTray.deleted) {
-          loaded.push(childTray);
-        }
-      }
-      setChildrenTrays(loaded);
+      // 子供たちを並列で取得することで高速化
+      const loaded = await Promise.all(tray.trayData.childrenUUids.map(uuid => loadTray(uuid)));
+      const filtered = loaded.filter((c): c is Tray => !!c);
+      
+      setChildrenTrays(filtered);
     })();
-  }, [tray.children, loadTray]);
+  }, [tray.trayData.childrenUUids, loadTray]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (isEditing && titleRef.current && !titleRef.current.contains(event.target as Node)) {
@@ -172,81 +151,60 @@ const TrayComponent: React.FC<Props> = ({
 
     document.addEventListener('click', handleClickOutside);
     return () => {
-      document.removeEventListener('click', handleClickOutside); // クリーンアップ
+      document.removeEventListener('click', handleClickOutside);
     };
-  }, [isEditing]); // isEditing が変更された時のみuseEffectを実行
+  }, [isEditing, finishEditing]);
 
-  const handleChildLocalUpdate = async (updatedChild: Tray) => {
-    if (!childrenTrays) return;
-    const updatedChildren = childrenTrays.map((c) =>
-      c.uuid === updatedChild.uuid ? updatedChild : c
-    );
-    setChildrenTrays(updatedChildren);
-    await onChildUpdate(updatedChild);
-  };
 
-  const moveFocus = async (direction: "up" | "down" | "left" | "right") => {
+
+  const moveFocus = useCallback(async (direction: "up" | "down" | "left" | "right") => {
     let targetUuid: string | null = null;
     if (direction === "left") {
-      if (tray.parentUuid) {
-        const parent = await loadTray(tray.parentUuid);
-        if (parent && !parent.deleted) {
-          targetUuid = parent.uuid;
-        } else {
-          console.log("No parent tray found or it is deleted");
+      if (tray.parentId) {
+        const parent = await loadTray(tray.parentId);
+        if (parent) {
+          targetUuid = parent.viewUUid;
         }
-      } else {
-        console.log("No parentUuid");
       }
     } else if (direction === "right") {
-      if (tray.children.length > 0) {
-        // Move to the first non-deleted child
-        for (const childUuid of tray.children) {
-          const child = await loadTray(childUuid);
-          if (child && !child.deleted) {
-            targetUuid = child.uuid;
-            break;
+      if (tray.trayData.childrenUUids.length > 0) {
+        for (const childUuid of tray.trayData.childrenUUids) {
+          const child = childUuid
+          break
+          // const child = await loadTray(childUuid);
+          // if (child) {
+            // targetUuid = child.viewUUid;
+            // break;
           }
         }
-      } else {
-        console.log("No children to move right");
       }
-    } else if (direction === "up" || direction === "down") {
-      if (tray.parentUuid) {
-        const parent = await loadTray(tray.parentUuid);
-        if (parent && !parent.deleted) {
-          const siblings = parent.children;
-          const currentIndex = siblings.indexOf(tray.uuid);
+     else if (direction === "up" || direction === "down") {
+      if (tray.parentId) {
+        const parent = await loadTray(tray.parentId);
+        if (parent) {
+          const siblings = parent.trayData.childrenUUids;
+          const currentIndex = siblings.indexOf(tray.viewUUid);
           if (currentIndex !== -1) {
             let newIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-            // Find next non-deleted sibling in the requested direction
             while (newIndex >= 0 && newIndex < siblings.length) {
               const siblingUuid = siblings[newIndex];
               const sibling = await loadTray(siblingUuid);
-              if (sibling && !sibling.deleted) {
+              if (sibling ) {
                 targetUuid = siblingUuid;
                 break;
               }
               newIndex = direction === "up" ? newIndex - 1 : newIndex + 1;
             }
-            if (!targetUuid) console.log(`No ${direction} non-deleted sibling`);
-          } else {
-            console.log("Tray not found in parent's children");
           }
-        } else {
-          console.log("No parent tray loaded or it is deleted");
         }
-      } else {
-        console.log(`No parentUuid for up/down movement`);
       }
     }
 
     if (targetUuid) {
       setFocusUuid(targetUuid);
     }
-  };
+  }, [loadTray, setFocusUuid, tray.trayData.childrenUUids, tray.parentId]);
 
-  // Toggle flex direction between row and column and update the tray
   const toggleFlexDirection = useCallback(() => {
     const newDirection = flexDirection === "row" ? "column" : "row";
     setFlexDirection(newDirection);
@@ -254,15 +212,15 @@ const TrayComponent: React.FC<Props> = ({
   }, [flexDirection, updateTray]);
 
   const deleteTray = useCallback(async () => {
-    if (!tray.parentUuid) return;
-    // Soft delete
-    onUpdate({ ...tray, deleted: true, lastModified: Date.now() });
-
-    // After deleting, move focus to the parent if available
-    if (tray.parentUuid) {
-      const parent = await loadTray(tray.parentUuid);
-      if (parent && !parent.deleted) {
-        setFocusUuid(parent.uuid);
+    
+    
+    const obs_parent = tray.parentId;
+    updateTray({parentId:null})
+    // onUpdate({ ...tray,  lastModified: Date.now() });
+    if (obs_parent) {
+      const parent = await loadTray(obs_parent);
+      if (parent) {
+        setFocusUuid(parent.viewUUid);
       } else {
         setFocusUuid(null);
       }
@@ -271,127 +229,115 @@ const TrayComponent: React.FC<Props> = ({
     }
   }, [tray, onUpdate, loadTray, setFocusUuid]);
 
+  const shallowCopyTray = useCallback(() => {
+    navigator.clipboard.writeText(JSON.stringify(tray)).then();
+  }, [tray]);
 
 
-  const deepCopyTray = ()=>{
-    // const cloned = JSON.parse(JSON.stringify(tray))
-    
 
-  }
 
-  const  shallowCopyTray = async () => {
-    navigator.clipboard.writeText(JSON.stringify(tray)).then()
-  }
 
-  const pastTray = (str:string) => {
-    const t = JSON.parse(str) as Tray
+
+
+  const pastTray = useCallback((str:string) => {
+    const t = JSON.parse(str) as Tray;
     onChildUpdate(t);
-    updateTray({ children: [t.uuid, ...tray.children], isFolded: false,editingStart:false });
-  }
+    updateTrayData({childrenUUids:[t.trayData.uuid,...t.trayData.childrenUUids]})
+    updateTray({isFolded:false})
+  }, [onChildUpdate,updateTray,updateTrayData]);
 
+  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const e = event.nativeEvent as KeyboardEvent;
+    const isFocused = focusUuid === tray.viewUUid;
+    if (!isFocused) return;
 
+    if (isEditing) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        finishEditing();
+      }
+      return;
+    }
 
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      const e = event.nativeEvent as KeyboardEvent;
-      const isFocused = focusUuid === tray.uuid;
-      if (!isFocused) return;
+    e.stopPropagation();
 
-      if (isEditing) {
-        if (e.key === "Enter") {
-          if (!e.shiftKey) {
-            e.preventDefault();
-            finishEditing();
-          }
+    switch (e.key) {
+      case "Enter":
+        e.preventDefault();
+        if (e.ctrlKey) {
+          addChild();
+        } else if (e.shiftKey) {
+          toggleEditMode();
+        } else {
+          toggleFold();
         }
-        return;
-      }
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        moveFocus("up");
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        moveFocus("down");
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        moveFocus("left");
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        moveFocus("right");
+        break;
+      case "Delete":
+        if (e.ctrlKey) {
+          e.preventDefault();
+          deleteTray();
+        }
+        break;
+      case "l":
+        if (e.ctrlKey){
+          e.preventDefault();
+          shallowCopyTray();
+        }
+        break;
+      case "v":
+        if (e.ctrlKey){
+          e.preventDefault();
+          navigator.clipboard.readText().then((str)=>{pastTray(str)});
+        }
+        break;
+      default:
+        break;
+    }
+  }, [
+    isEditing,
+    focusUuid,
+    // tray.uuid,
+    addChild,
+    toggleEditMode,
+    toggleFold,
+    moveFocus,
+    deleteTray,
+    finishEditing,
+    shallowCopyTray,
+    pastTray
+  ]);
 
-      e.stopPropagation();
-
-      switch (e.key) {
-        case "Enter":
-          e.preventDefault();
-          if (e.ctrlKey) {
-            addChild();
-          } else if (e.shiftKey) {
-            toggleEditMode();
-          } else {
-            toggleFold();
-          }
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          moveFocus("up");
-          break;
-        case "ArrowDown":
-          e.preventDefault();
-          moveFocus("down");
-          break;
-        case "ArrowLeft":
-          e.preventDefault();
-          moveFocus("left");
-          break;
-        case "ArrowRight":
-          e.preventDefault();
-          moveFocus("right");
-          break;
-        case "Delete":
-          if (e.ctrlKey) {
-            e.preventDefault();
-            deleteTray();
-          }
-          break;
-        case "l":
-          if (e.ctrlKey){
-            e.preventDefault()
-            shallowCopyTray()
-          }
-          break
-        case "v":
-          if (e.ctrlKey){
-            e.preventDefault()
-            navigator.clipboard.readText().then((str)=>{pastTray(str)})
-          }
-          break
-        
-        default:
-          break;
-      }
-    },
-    [
-      isEditing,
-      tray,
-      focusUuid,
-      addChild,
-      toggleEditMode,
-      toggleFold,
-      moveFocus,
-      deleteTray,
-      finishEditing
-    ]
-  );
-
-  const isFocused = focusUuid === tray.uuid;
+  const isFocused = focusUuid === tray.viewUUid;
+  const lastModifiedDate = useMemo(() => new Date(tray.trayData.lastModified).toLocaleString(), [tray.trayData.lastModified]);
 
   return (
     <div
       ref={containerRef}
       tabIndex={0}
       style={{
-        borderLeft: `2px solid ${tray.borderColor}`,
-        borderBottom: `2px solid ${tray.borderColor}`,
-
-        // borderTopWidth:"0px",
-        // borderRightWidth:"0px",
-        // marginTop: "4px",
-        // marginBottom: "8px",
+        borderLeft: `2px solid ${tray.trayData.borderColor}`,
+        borderBottom: `2px solid ${tray.trayData.borderColor}`,
         cursor: "pointer",
         outline: isFocused ? "2px solid blue" : "none",
         outlineOffset: isFocused ? "-1px" : undefined,
         paddingTop:"2px",
         paddingBottom:"2px",
-
       }}
       className="tray"
       onKeyDown={handleKeyDown}
@@ -402,17 +348,17 @@ const TrayComponent: React.FC<Props> = ({
         e.stopPropagation();
       }}
       onClick={(e) => {
-        setFocusUuid(tray.uuid);
+        setFocusUuid(tray.viewUUid);
         e.stopPropagation();
       }}
       onContextMenu={(e) => {
         e.preventDefault();
         toggleFlexDirection();
-        e.stopPropagation()
+        e.stopPropagation();
       }}
     >
-      <div style={{ display: "flex", alignItems: "center",  }}>
-        {tray.children.length > 0 &&
+      <div style={{ display: "flex", alignItems: "center" }}>
+        {tray.trayData.childrenUUids.length > 0 &&
           (tray.isFolded ? (
             <div
               onClick={(e) => {
@@ -448,7 +394,7 @@ const TrayComponent: React.FC<Props> = ({
           {currentName}
         </div>
 
-        {tray.children.length > 0 &&
+        {tray.trayData.childrenUUids.length > 0 &&
           (tray.isFolded ? (
             <div
               onClick={(e) => {
@@ -480,7 +426,7 @@ const TrayComponent: React.FC<Props> = ({
         <div style={{ marginLeft: "2px" ,display:"flex",flexDirection:flexDirection}}>
           {childrenTrays.map((child) => (
             <TrayComponent
-              key={child.uuid}
+              key={child.trayData.uuid}
               tray={child}
               onUpdate={onUpdate}
               loadTray={loadTray}
@@ -494,6 +440,6 @@ const TrayComponent: React.FC<Props> = ({
       )}
     </div>
   );
-};
+});
 
 export default TrayComponent;
