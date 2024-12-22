@@ -9,7 +9,12 @@ export const ROOT_TRAY_UUID = "root-tray-uuid";
 
 function TrayRootView({ app }: { app: App }) {
   const [tray, setTray] = useState<Tray | null>(null);
-  const [focusUuid, setFocusUuid] = useState<string | null>(null);
+  // const [focusUuid, setFocusUuid] = useState<string[] | null>(null);
+  // const [focusPath, addFocusPath] = useState<string[]>([]);
+  const [focusPath, setFocusPath] = useState<string[] | null>(null);
+  const handleSetFocusPath = (newPath: string[] | null) => {
+    setFocusPath(newPath);
+  };
 
   useEffect(() => {
     (async () => {
@@ -24,8 +29,7 @@ function TrayRootView({ app }: { app: App }) {
           children: [],
           lastModified: Date.now(),
           metaData: {},
-          parentUuid: null,
-          deleted: null,
+          parentUuid: [],
           main: null,
           flexDirection: "row",
           editingStart:false
@@ -33,7 +37,7 @@ function TrayRootView({ app }: { app: App }) {
         await saveTrayToNote(app, loaded);
       }
       setTray(loaded);
-      setFocusUuid(loaded.uuid);
+      // setFocusUuid(loaded.uuid);
     })();
   }, [app]);
 
@@ -62,9 +66,12 @@ function TrayRootView({ app }: { app: App }) {
       onUpdate={handleUpdate}
       loadTray={loadTrayFn}
       onChildUpdate={onChildUpdate}
-      focusUuid={focusUuid}
-      setFocusUuid={setFocusUuid}
-      editingStart={false}
+      focusPath={focusPath}
+      setNowFocusPath={handleSetFocusPath}
+      parentPath={[]}
+      // editingStart={false}
+      // setFocusPath={setFocusUuid}
+      // editingStart={false}
     />
   );
 }

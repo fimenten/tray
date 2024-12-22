@@ -6,10 +6,12 @@ export interface Tray {
     children: string[];
     lastModified: number;
     metaData: Record<string, any>;
-    parentUuid: string | null; // added parentUuid
-    deleted:boolean|null
+    parentUuid: string[] | null|undefined; // added parentUuid
+    // deleted:
     main:string|null
     flexDirection:"row"|"column"
     editingStart:boolean
   }
+  
+
   

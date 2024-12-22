@@ -30,7 +30,9 @@ export async function loadTrayFromNote(app: App, uuid: string): Promise<Tray | n
   }
   const content = await app.vault.read(file);
   try {
-    const tray = JSON.parse(content) as Tray;
+    const tray = JSON.parse(content);
+    if (tray.deleted){return null}
+    return tray
     return tray;
   } catch (e) {
     console.error("Failed to parse tray:", e);
