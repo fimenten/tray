@@ -390,7 +390,7 @@ const TrayComponent: React.FC<Props> = ({
 
   /** Shallow copy current tray. */
   const shallowCopyTray = useCallback(() => {
-    navigator.clipboard.writeText(JSON.stringify(tray));
+    navigator.clipboard.writeText(JSON.stringify([tray]));
   }, [tray]);
 
   /** Deep copy current tray subtree. */
