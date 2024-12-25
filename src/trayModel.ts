@@ -7,11 +7,11 @@ export interface Tray {
     lastModified: number;
     metaData: Record<string, any>;
     parentUuid: string[] | null|undefined; // added parentUuid
-    // deleted:
     main:string|null
     flexDirection:"row"|"column"
     editingStart:boolean
   }
   
+
 
   

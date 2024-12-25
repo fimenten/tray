@@ -1,8 +1,13 @@
+// trayIO.ts
 import { App, TFile } from "obsidian";
 import { Tray } from "./trayModel";
 
 const TRAY_FOLDER = "trays";
 
+
+
+
+// Called once in your plugin's onload
 export async function ensureTrayFolder(app: App) {
   const folder = app.vault.getAbstractFileByPath(TRAY_FOLDER);
   if (!folder) {
@@ -11,9 +16,10 @@ export async function ensureTrayFolder(app: App) {
 }
 
 export async function saveTrayToNote(app: App, tray: Tray): Promise<void> {
+  // We assume TRAY_FOLDER already exists now.
   const content = JSON.stringify(tray, null, 2);
   const filePath = `${TRAY_FOLDER}/${tray.uuid}.md`;
-  await ensureTrayFolder(app);
+
   let file = app.vault.getAbstractFileByPath(filePath);
   if (!file) {
     await app.vault.create(filePath, content);
@@ -30,9 +36,8 @@ export async function loadTrayFromNote(app: App, uuid: string): Promise<Tray | n
   }
   const content = await app.vault.read(file);
   try {
-    const tray = JSON.parse(content);
-    if (tray.deleted){return null}
-    return tray
+    const tray = JSON.parse(content) as Tray;
+
     return tray;
   } catch (e) {
     console.error("Failed to parse tray:", e);

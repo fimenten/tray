@@ -51,6 +51,7 @@ function TrayRootView({ app }: { app: App }) {
   };
 
   const onChildUpdate = async (child: Tray) => {
+    
     await saveTrayToNote(app, child);
   };
 
