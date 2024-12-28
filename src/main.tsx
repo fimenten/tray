@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { Tray } from "./trayModel";
 import { loadTrayFromNote, saveTrayToNote, ensureTrayFolder } from "./trayIO";
 import TrayComponent from "./TrayComponent";
+import { trayFixingFamilyProblem } from "./otherStuff";
 
 export const ROOT_TRAY_UUID = "root-tray-uuid";
 
@@ -32,7 +33,9 @@ function TrayRootView({ app }: { app: App }) {
           parentUuid: [],
           main: null,
           flexDirection: "row",
-          editingStart:false
+          editingStart:false,
+          tags:[],
+          watchTags:[]
         };
         await saveTrayToNote(app, loaded);
       }
@@ -60,6 +63,10 @@ function TrayRootView({ app }: { app: App }) {
   };
 
   if (!tray) return <div>Loading...</div>;
+  
+  
+  
+  // trayFixingFamilyProblem(tray,loadTrayFn,handleUpdate)
 
   return (
     <TrayComponent
@@ -94,6 +101,7 @@ class ReactView extends ItemView {
 
   async onOpen() {
     const root = createRoot(this.containerEl);
+    
     root.render(<TrayRootView app={this.app} />);
   }
 

@@ -10,6 +10,8 @@ export interface Tray {
     main:string|null
     flexDirection:"row"|"column"
     editingStart:boolean
+    tags:string[] |null
+    watchTags:string[]|null
   }
   
 

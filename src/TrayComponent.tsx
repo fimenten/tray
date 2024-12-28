@@ -4,121 +4,25 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
-  KeyboardEvent,
   MouseEvent,
+  memo,
 } from "react";
 import { Tray } from "./trayModel";
 
-/** Utility functions */
-const getRandomColor = (): string => {
-  const letters = "0123456789ABCDEF";
-  let color = "#";
-  for (let i = 0; i < 6; i++) {
-    color += letters[Math.floor(Math.random() * 16)];
-  }
-  return color;
-};
-
-const arraysEqual = (a: string[] | null, b: string[] | null): boolean => {
-  if (!a || !b) return false;
-  if (a.length !== b.length) return false;
-  return a.every((val, i) => val === b[i]);
-};
-
-/** Export sub-tree from a given root. */
-const exportTraySubtree = async (
-  rootUuid: string,
-  loadTray: (uuid: string) => Promise<Tray | null>
-): Promise<Tray[]> => {
-  const visited = new Map<string, Tray>();
-  const stack = [rootUuid];
-
-  while (stack.length) {
-    const currentUuid = stack.pop()!;
-    if (visited.has(currentUuid)) continue;
-    const currentTray = await loadTray(currentUuid);
-    if (!currentTray) continue;
-    visited.set(currentTray.uuid, { ...currentTray });
-    currentTray.children.forEach((childUuid) => {
-      if (!visited.has(childUuid)) {
-        stack.push(childUuid);
-      }
-    });
-  }
-  return [...visited.values()];
-};
-
-/** Reassign UUIDs and remove editing flags. */
-const reassignUuidsAndTimestamps = (trays: Tray[]): Tray[] => {
-  const uuidMap = new Map<string, string>();
-
-  const newTrays = trays.map((oldTray) => {
-    const newUuid = crypto.randomUUID();
-    uuidMap.set(oldTray.uuid, newUuid);
-    return {
-      ...oldTray,
-      uuid: newUuid,
-      editingStart: false,
-    };
-  });
-
-  newTrays.forEach((t) => {
-    t.children = t.children.map((childUuid) => uuidMap.get(childUuid) || childUuid);
-    t.parentUuid = t.parentUuid?.map((p) => uuidMap.get(p) || p);
-  });
-
-  return newTrays;
-};
-
-/** Import/paste sub-tree into the given parent tray. */
-const importTraySubtree = async (
-  subtreeData: string,
-  onChildUpdate: (t: Tray) => Promise<void>,
-  parentTray: Tray,
-  onUpdate: (updatedTray: Tray) => void
-): Promise<Tray | null> => {
-  try {
-    const trays = JSON.parse(subtreeData) as Tray[];
-    if (!Array.isArray(trays) || trays.length === 0) return null;
-    const newTrays = reassignUuidsAndTimestamps(trays);
-    const newRootTray = newTrays[0];
-
-    onUpdate({
-      ...parentTray,
-      children: [newRootTray.uuid, ...parentTray.children],
-      isFolded: false,
-    });
-
-    for (const t of newTrays) {
-      await onChildUpdate(t);
-    }
-    return newRootTray;
-  } catch (error) {
-    console.error("Invalid JSON in clipboard:", error);
-    return null;
-  }
-};
-
-/** Deep copy a tray subtree and write JSON to clipboard. */
-const handleDeepCopyTray = async (
-  tray: Tray,
-  loadTray: (uuid: string) => Promise<Tray | null>
-) => {
-  const subtree = await exportTraySubtree(tray.uuid, loadTray);
-  const text = JSON.stringify(subtree);
-  await navigator.clipboard.writeText(text);
-};
-
-/** Deep paste a subtree from clipboard into current tray. */
-const handleDeepPasteTray = async (
-  tray: Tray,
-  loadTray: (uuid: string) => Promise<Tray | null>,
-  onChildUpdate: (child: Tray) => Promise<void>,
-  onUpdate: (updatedTray: Tray) => void
-) => {
-  const data = await navigator.clipboard.readText();
-  await importTraySubtree(data, onChildUpdate, tray, onUpdate);
-};
+// Import splitted logic/files
+import {
+  getRandomColor,
+  arraysEqual,
+  exportTraySubtree,
+  handleDeepCopyTray,
+  handleDeepPasteTray,
+  importTraySubtree,
+  trayFixingFamilyProblem,
+} from "./otherStuff";
+import { useKeyboardInteraction } from "./keyboardInteraction";
+import { TrayContextMenu } from "./contextMenu";
+import { onUpdateTags, tagMapping } from "./tagManager";
+import { PropertyEditing } from "./Prop";
 
 /** Component Props Interface */
 interface Props {
@@ -131,7 +35,54 @@ interface Props {
   parentPath: string[];
 }
 
-/** The Tray Component */
+/** 子トレイの描画だけを受け持つサブコンポーネント */
+const TrayChildren = memo<{
+  childrenTrays: Tray[];
+  onUpdate: (updatedTray: Tray) => void;
+  loadTray: (uuid: string) => Promise<Tray | null>;
+  onChildUpdate: (child: Tray) => Promise<void>;
+  parentPath: string[];
+  myPath: string[];
+  setNowFocusPath: (uuids: string[] | null) => void;
+  focusPath: string[] | null;
+  flexDirection: "row" | "column";
+}>(
+  ({
+    childrenTrays,
+    onUpdate,
+    loadTray,
+    onChildUpdate,
+    parentPath,
+    myPath,
+    setNowFocusPath,
+    focusPath,
+    flexDirection,
+  }) => {
+    return (
+      <div
+        style={{
+          marginLeft: "2px",
+          display: "flex",
+          flexDirection: flexDirection,
+        }}
+      >
+        {childrenTrays.map((child) => (
+          <TrayComponent
+            key={child.uuid}
+            tray={child}
+            onUpdate={onUpdate}
+            loadTray={loadTray}
+            onChildUpdate={onChildUpdate}
+            parentPath={myPath}
+            setNowFocusPath={setNowFocusPath}
+            focusPath={focusPath}
+          />
+        ))}
+      </div>
+    );
+  }
+);
+
 const TrayComponent: React.FC<Props> = ({
   tray,
   onUpdate,
@@ -144,6 +95,7 @@ const TrayComponent: React.FC<Props> = ({
   /** Build a path from parent -> current */
   const myPath = useMemo(() => {
     return parentPath ? [...parentPath, tray.uuid] : [tray.uuid];
+    // parentPath なしのケースがあるなら [tray.uuid] へ
   }, [tray.uuid, parentPath]);
 
   /** Local states */
@@ -162,33 +114,62 @@ const TrayComponent: React.FC<Props> = ({
   const titleRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const isFocused = useMemo(() => arraysEqual(focusPath, myPath), [focusPath, myPath]);
+  const isFocused = useMemo(
+    () => arraysEqual(focusPath, myPath),
+    [focusPath, myPath]
+  );
 
-  /** Ensure the container is focused when the component is "focused" */
-  useEffect(() => {
-    if (isFocused) containerRef.current?.focus();
-  }, [isFocused]);
+  /** 子供のTrayたちをローカルに保持 */
+  const [childrenTrays, setChildrenTrays] = useState<Tray[] | null>(null);
 
-  /** Turn off editingStart after the first render if it was true. */
+  /**
+   * tray.tags / tray.watchTags 編集用。  
+   * 入力中はローカルステートにだけ持っておき、編集完了時に tray を更新して再レンダーを抑制。
+   */
+  const [isTagEditing, setTagEditing] = useState(false);
+  const [tagInputValue, setTagInputValue] = useState(
+    tray.tags ? tray.tags.join(",") : ""
+  );
+
+  const [isWatchTagEditing, setWatchTagEditing] = useState(false);
+  const [watchTagInputValue, setWatchTagInputValue] = useState(
+    tray.watchTags ? tray.watchTags.join(",") : ""
+  );
+
+  const [isUuidInputing, setIsUuidInputing] = useState(false);
+
+  /** タグ入力 / 監視タグ入力 / Uuid入力のいずれかを行っている最中かどうか */
+  const isAnyOpening = isTagEditing || isWatchTagEditing || isUuidInputing;
+
+  /**
+   * 一度だけ実行したいもの(初期フォーカスや editingStart フラグの解除) と
+   * isFocused によるフォーカス管理をまとめて最適化
+   */
   useEffect(() => {
+    // 初回のみ editingStart を落とす
     if (init) {
       onUpdate({ ...tray, editingStart: false });
     }
+
+    // フォーカスすべきタイミングでフォーカス
+    if (isFocused) {
+      containerRef.current?.focus();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isFocused]); // init ではなく isFocused のみ依存
 
-  /** Keep track of children trays locally (so we can render them). */
-  const [childrenTrays, setChildrenTrays] = useState<Tray[] | null>(null);
-
-  /** Pre-load all child trays. */
+  /** 子Trayの読み込み + 子Trayが存在するのに borderColor が #ccc ならランダム色に */
   useEffect(() => {
     let isCancelled = false;
 
     (async () => {
-      const loadedTrays = await Promise.all(tray.children.map((uuid) => loadTray(uuid)));
+      // 子Trayの読み込み
+      const loadedTrays = await Promise.all(
+        tray.children.map((uuid) => loadTray(uuid))
+      );
       if (isCancelled) return;
 
-      // If a child tray doesn't have a parent, fix that parent's reference
+      // 親が設定されていない子Trayがあれば修正
       loadedTrays
         .filter((t) => t && !t.parentUuid?.length)
         .forEach((t) => {
@@ -199,21 +180,19 @@ const TrayComponent: React.FC<Props> = ({
         });
 
       setChildrenTrays(loadedTrays.filter((t) => t != null) as Tray[]);
+
+      // 子要素がありかつ borderColor が #ccc の場合、ランダム色を設定
+      if (tray.children.length > 0 && tray.borderColor === "#ccc") {
+        onUpdate({ ...tray, borderColor: getRandomColor() });
+      }
     })();
 
     return () => {
       isCancelled = true;
     };
-  }, [tray.children, loadTray, onUpdate, tray.uuid]);
+  }, [tray.children.length, loadTray, onUpdate, tray.uuid, tray.borderColor]);
 
-  /** If tray has children but borderColor is still #ccc, pick a random color. */
-  useEffect(() => {
-    if (tray.children.length > 0 && tray.borderColor === "#ccc") {
-      onUpdate({ ...tray, borderColor: getRandomColor() });
-    }
-  }, [tray.children.length, tray.borderColor, onUpdate, tray]);
-
-  /** If in edit mode, focus the title ref and select all text. */
+  /** 編集モードになったらタイトルにフォーカス＆テキスト全選択 */
   useEffect(() => {
     if (isEditing && titleRef.current) {
       titleRef.current.focus();
@@ -229,15 +208,22 @@ const TrayComponent: React.FC<Props> = ({
     }
   }, [isEditing, currentName]);
 
-  /** Date formatting. */
-  const lastModifiedDate = useMemo(
-    () => new Date(tray.lastModified).toLocaleString(),
-    [tray.lastModified]
-  );
+  /** Date formatting */
+  const lastModifiedDate = useMemo(() => {
+    const dateObj = new Date(tray.lastModified);
 
-  /** Helpers */
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const day = String(dateObj.getDate()).padStart(2, "0");
 
-  /** Update the tray by merging partial changes. */
+    const hours = String(dateObj.getHours()).padStart(2, "0");
+    const minutes = String(dateObj.getMinutes()).padStart(2, "0");
+    const seconds = String(dateObj.getSeconds()).padStart(2, "0");
+
+    return `${year}-${month}-${day}\n${hours}:${minutes}:${seconds}`;
+  }, [tray.lastModified]);
+
+  /** Helpers inside component */
   const updateTray = useCallback(
     (partial: Partial<Tray>) => {
       const updatedTray: Tray = { ...tray, ...partial };
@@ -246,7 +232,6 @@ const TrayComponent: React.FC<Props> = ({
     [tray, onUpdate]
   );
 
-  /** Finish editing the tray title. */
   const finishEditing = useCallback(() => {
     setIsEditing(false);
     updateTray({ editingStart: false });
@@ -262,17 +247,14 @@ const TrayComponent: React.FC<Props> = ({
     containerRef.current?.focus();
   }, [tray, updateTray]);
 
-  /** Toggle fold/unfold. */
   const toggleFold = useCallback(() => {
     updateTray({ isFolded: !tray.isFolded });
   }, [tray.isFolded, updateTray]);
 
-  /** Enter editing mode for the tray’s name. */
   const toggleEditMode = useCallback(() => {
     setIsEditing(true);
   }, []);
 
-  /** Add a new child tray. */
   const addChild = useCallback(async () => {
     if (isEditing) return;
     const newUuid = crypto.randomUUID();
@@ -288,6 +270,8 @@ const TrayComponent: React.FC<Props> = ({
       main: null,
       flexDirection: "column",
       editingStart: true,
+      tags: [],
+      watchTags: [],
     };
     await onChildUpdate(newChild);
     updateTray({
@@ -298,7 +282,6 @@ const TrayComponent: React.FC<Props> = ({
     setNowFocusPath([...myPath, newUuid]);
   }, [isEditing, onChildUpdate, tray, updateTray, setNowFocusPath, myPath]);
 
-  /** Update one child in local state and in the store. */
   const handleChildLocalUpdate = useCallback(
     async (updatedChild: Tray) => {
       if (!childrenTrays) return;
@@ -311,7 +294,6 @@ const TrayComponent: React.FC<Props> = ({
     [childrenTrays, onChildUpdate]
   );
 
-  /** Keyboard navigation among trays. */
   const moveFocus = useCallback(
     async (direction: "up" | "down" | "left" | "right") => {
       let targetPath: string[] | null = null;
@@ -321,6 +303,9 @@ const TrayComponent: React.FC<Props> = ({
         if (parentPath) targetPath = parentPath;
       } else if (direction === "right") {
         // Move focus to the first child
+        if (tray.isFolded) {
+          toggleFold();
+        }
         if (tray.children.length > 0) {
           for (const childUuid of tray.children) {
             const child = await loadTray(childUuid);
@@ -345,7 +330,8 @@ const TrayComponent: React.FC<Props> = ({
         } else {
           // keep searching for a valid sibling up/down
           while (true) {
-            currentIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+            currentIndex =
+              direction === "up" ? currentIndex - 1 : currentIndex + 1;
             if (currentIndex < 0 || currentIndex >= siblings.length) {
               targetPath = myPath;
               break;
@@ -365,17 +351,24 @@ const TrayComponent: React.FC<Props> = ({
       }
       if (targetPath) setNowFocusPath(targetPath);
     },
-    [loadTray, myPath, parentPath, tray.children, tray.uuid, setNowFocusPath]
+    [loadTray, myPath, parentPath, tray.children, tray.uuid, setNowFocusPath, toggleFold, tray.isFolded]
   );
 
-  /** Toggle flex direction. */
+  /**
+   * tray.tags / tray.watchTags が変化したときだけ tagManager などを呼ぶ
+   * ただし、tagInputValue / watchTagInputValue の編集途中はローカルでのみ行い、
+   * finish(Blur)時に tray へ確定 => tray.tags 更新 => この useEffect
+   */
+  useEffect(() => {
+    onUpdateTags(tray);
+  }, [tray.tags, tray.watchTags]);
+
   const toggleFlexDirection = useCallback(() => {
     const newDirection = flexDirection === "row" ? "column" : "row";
     setFlexDirection(newDirection);
     updateTray({ flexDirection: newDirection });
   }, [flexDirection, updateTray]);
 
-  /** Delete current tray from its local parent. */
   const deleteTray = useCallback(async () => {
     const localParent = parentPath[parentPath.length - 1];
     if (!localParent) return;
@@ -383,27 +376,28 @@ const TrayComponent: React.FC<Props> = ({
     updateTray({ parentUuid: newParents });
     const parentTray = await loadTray(localParent);
     if (parentTray) {
-      const newChildren = parentTray.children.filter((childId) => childId !== tray.uuid);
+      const newChildren = parentTray.children.filter(
+        (childId) => childId !== tray.uuid
+      );
       onUpdate({ ...parentTray, children: newChildren });
     }
   }, [loadTray, onUpdate, parentPath, tray, updateTray]);
 
-  /** Shallow copy current tray. */
   const shallowCopyTray = useCallback(() => {
+    // Shallow copy: just the current tray in an array
     navigator.clipboard.writeText(JSON.stringify([tray]));
   }, [tray]);
 
-  /** Deep copy current tray subtree. */
   const deepCopyTray = useCallback(async () => {
     await handleDeepCopyTray(tray, loadTray);
   }, [tray, loadTray]);
 
-  /** Deep paste a previously copied subtree. */
   const deepPasteTray = useCallback(async () => {
+    await trayFixingFamilyProblem(tray, loadTray, onUpdate);
     await handleDeepPasteTray(tray, loadTray, onChildUpdate, onUpdate);
   }, [tray, loadTray, onChildUpdate, onUpdate]);
 
-  /** Paste a single tray (shallow) from a JSON string. */
+  /** シングル(単純)ペースト */
   const pastTray = useCallback(
     (str: string) => {
       const t = JSON.parse(str) as Tray;
@@ -417,117 +411,150 @@ const TrayComponent: React.FC<Props> = ({
     [onChildUpdate, tray.children, updateTray]
   );
 
-  /** Output subtree as Markdown. */
+  /**
+   * watchTags がセットされている場合、
+   * そのタグを持つ Tray を自動的に自分の children にまとめる
+   */
+  useEffect(() => {
+    if (!tray.watchTags || tray.watchTags.length === 0) return;
+    const newChildrenSet = [...tray.children];
+
+    for (const t of tray.watchTags) {
+      const traysWithTag = tagMapping.get(t) ?? [];
+      for (const childUuid of traysWithTag) {
+        if (newChildrenSet.includes(childUuid)) continue;
+        // Avoid cycles
+        if (childUuid !== tray.uuid) {
+          newChildrenSet.push(childUuid);
+        }
+      }
+    }
+
+    const newChildrenArray = Array.from(newChildrenSet);
+    if (!arraysEqual(newChildrenArray, tray.children)) {
+      updateTray({ children: newChildrenArray });
+    }
+  }, [tray.watchTags, tray.children, tagMapping, tray.uuid, updateTray]);
+
+  /** Markdown出力 */
   const handleOutputAsMarkdown = useCallback(async () => {
-    const subtree = await exportTraySubtree(tray.uuid, loadTray);
-    const lines = subtree.map(
-      (t) => `- **${t.name || "(no name)"}** (uuid: ${t.uuid})`
-    );
+    async function buildMarkdown(uuid: string, depth = 0): Promise<string[]> {
+      const t = await loadTray(uuid);
+      if (!t) return [];
+
+      const indent = "  ".repeat(depth);
+      const name = t.name || "(no name)";
+
+      const lines = [`${indent}- ${name}`];
+
+      if (t.children?.length) {
+        for (const childUuid of t.children) {
+          lines.push(...(await buildMarkdown(childUuid, depth + 1)));
+        }
+      }
+      return lines;
+    }
+    const lines = await buildMarkdown(tray.uuid, 0);
     const markdown = lines.join("\n");
     await navigator.clipboard.writeText(markdown);
     console.log("Tray subtree copied to clipboard as Markdown!");
   }, [tray.uuid, loadTray]);
 
-  /** Key handling. */
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (!isFocused) return;
-      const e = event as unknown as KeyboardEvent;
-      if (isEditing) {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          finishEditing();
-        }
-        return;
-      }
+  /** タグ編集を終了する */
+  const finishTagEditing = useCallback(() => {
+    setTagEditing(false);
+    containerRef.current?.focus();
+  }, []);
 
-      e.stopPropagation();
-      switch (e.key) {
-        case "Enter":
-          e.preventDefault();
-          if (e.ctrlKey) {
-            addChild();
-          } else if (e.shiftKey) {
-            toggleEditMode();
-          } else {
-            toggleFold();
-          }
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          moveFocus("up");
-          break;
-        case "ArrowDown":
-          e.preventDefault();
-          moveFocus("down");
-          break;
-        case "ArrowLeft":
-          e.preventDefault();
-          moveFocus("left");
-          break;
-        case "ArrowRight":
-          e.preventDefault();
-          moveFocus("right");
-          break;
-        case "Delete":
-          if (e.ctrlKey) {
-            e.preventDefault();
-            deleteTray();
-            moveFocus("left");
-          }
-          break;
-        case "l":
-          if (e.ctrlKey) {
-            e.preventDefault();
-            shallowCopyTray();
-          }
-          break;
-        case "c":
-          if (e.ctrlKey) {
-            e.preventDefault();
-            deepCopyTray();
-          }
-          break;
-        case "v":
-          if (e.ctrlKey) {
-            e.preventDefault();
-            deepPasteTray();
-          }
-          break;
-        default:
-          break;
-      }
-    },
-    [
-      isFocused,
-      isEditing,
-      finishEditing,
-      addChild,
-      toggleEditMode,
-      toggleFold,
-      moveFocus,
-      deleteTray,
-      shallowCopyTray,
-      deepCopyTray,
-      deepPasteTray,
-    ]
-  );
+  /** 監視タグ編集を終了する */
+  const finishWatchTagEditing = useCallback(() => {
+    setWatchTagEditing(false);
+    containerRef.current?.focus();
+  }, []);
 
-  /** Right-click to open context menu. */
+  /**
+   * タグ入力が変わるたびに tray.tags を更新するのではなく、
+   * 「編集が終わったタイミング」でまとめて反映する。
+   * ここでは tagInputValue が更新されるたびに tray へすぐ反映 => 再レンダーしているので
+   * 好みに応じて「Blur時だけ反映」にするなど制御するとさらに無駄を減らせる。
+   */
+  useEffect(() => {
+    const newTags = tagInputValue
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s !== "");
+    if (!arraysEqual(newTags, tray.tags ?? [])) {
+      onUpdate({ ...tray, tags: newTags });
+    }
+  }, [tagInputValue]);
+
+  useEffect(() => {
+    const newWatchTags = watchTagInputValue
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s !== "");
+    if (!arraysEqual(newWatchTags, tray.watchTags ?? [])) {
+      onUpdate({ ...tray, watchTags: newWatchTags });
+    }
+  }, [watchTagInputValue]);
+
+  /** 「他の入力状態を全部閉じる」 */
+  const onFinish = useCallback(() => {
+    setTagEditing(false);
+    setWatchTagEditing(false);
+    setIsUuidInputing(false);
+  }, []);
+
+  /** Hook from keyboardInteraction */
+  const { handleKeyDown } = useKeyboardInteraction({
+    isFocused,
+    isEditing,
+    isAnyOpening,
+    setTagEditing,
+    setWatchTagEditing,
+    finishEditing,
+    addChild,
+    toggleEditMode,
+    toggleFold,
+    moveFocus,
+    deleteTray,
+    shallowCopyTray,
+    deepCopyTray,
+    deepPasteTray,
+  });
+
+  /** Context menu 関連 */
+  const openContextMenu = useCallback((mouseX: number, mouseY: number) => {
+    setContextMenuPosition({ x: mouseX, y: mouseY });
+    setShowContextMenu(true);
+  }, []);
+
   const handleContextMenu = useCallback(
     (e: MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      setContextMenuPosition({ x: e.clientX, y: e.clientY });
-      setShowContextMenu(true);
+      openContextMenu(e.clientX, e.clientY);
     },
-    []
+    [openContextMenu]
   );
 
-  /** Close context menu if clicking outside. */
+  const handleContextMenuButtonClick = useCallback(
+    (e: MouseEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+      handleContextMenu(e);
+    },
+    [handleContextMenu]
+  );
+
+  /** コンテキストメニューや編集終了の検知 */
   useEffect(() => {
     const handleClickOutside = (event: globalThis.MouseEvent) => {
-      if (isEditing && titleRef.current && !titleRef.current.contains(event.target as Node)) {
+      // タイトル編集中ならクリック外しで終了
+      if (
+        isEditing &&
+        titleRef.current &&
+        !titleRef.current.contains(event.target as Node)
+      ) {
         finishEditing();
       }
       if (showContextMenu) {
@@ -588,7 +615,9 @@ const TrayComponent: React.FC<Props> = ({
                   toggleFold();
                 }}
                 style={{ marginRight: "5px", display: "flex" }}
-              />
+              >
+                ▼
+              </div>
             ))}
 
           {/* Tray title */}
@@ -611,91 +640,65 @@ const TrayComponent: React.FC<Props> = ({
             {currentName}
           </div>
 
-          {/* Folding toggle (right arrow) */}
-          {tray.children.length > 0 &&
-            (tray.isFolded ? (
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleFold();
-                }}
-                style={{ marginRight: "5px", display: "flex" }}
-              />
-            ) : (
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleFold();
-                }}
-                style={{ marginRight: "5px", display: "flex" }}
-              >
-                ▼
-              </div>
-            ))}
-          <span style={{ marginLeft: "10px", fontSize: "0.8em", color: "#666" }}>
-            Last modified: {lastModifiedDate}
+          <span
+            style={{
+              marginLeft: "10px",
+              fontSize: "0.8em",
+              color: "#666",
+              maxWidth: "20%",
+            }}
+          >
+            {lastModifiedDate}
           </span>
+          <div style={{ marginLeft: "8px" }} onClick={handleContextMenuButtonClick}>
+            ︙
+          </div>
         </div>
 
         {/* CHILDREN */}
         {!tray.isFolded && childrenTrays && childrenTrays.length > 0 && (
-          <div
-            style={{
-              marginLeft: "2px",
-              display: "flex",
-              flexDirection: flexDirection,
-            }}
-          >
-            {childrenTrays.map((child) => (
-              <TrayComponent
-                key={child.uuid}
-                tray={child}
-                onUpdate={onUpdate}
-                loadTray={loadTray}
-                onChildUpdate={onChildUpdate}
-                parentPath={myPath}
-                setNowFocusPath={setNowFocusPath}
-                focusPath={focusPath}
-              />
-            ))}
-          </div>
+          <TrayChildren
+            childrenTrays={childrenTrays}
+            onUpdate={onUpdate}
+            loadTray={loadTray}
+            onChildUpdate={onChildUpdate}
+            parentPath={parentPath}
+            myPath={myPath}
+            setNowFocusPath={setNowFocusPath}
+            focusPath={focusPath}
+            flexDirection={flexDirection}
+          />
         )}
       </div>
 
+      {/* 詳細設定UIなど */}
+      <PropertyEditing
+        targetTray={tray}
+        onUpdate={onUpdate}
+        loadtray={loadTray}
+        onTagUpdate={setTagInputValue}
+        onWatchTagUpdate={setWatchTagInputValue}
+        containerRef={containerRef}
+        isAddingUuid={isUuidInputing}
+        isTagEditing={isTagEditing}
+        isWatchTagEditing={isWatchTagEditing}
+        onFinish={onFinish}
+      />
+
       {/* CONTEXT MENU */}
-      {showContextMenu && contextMenuPosition && (
-        <div
-          style={{
-            position: "fixed",
-            top: contextMenuPosition.y,
-            left: contextMenuPosition.x,
-            background: "#fff",
-            border: "1px solid #ccc",
-            zIndex: 9999,
-            padding: "8px",
-            borderRadius: "4px",
-          }}
-        >
-          <div
-            style={{ cursor: "pointer", marginBottom: "5px" }}
-            onClick={() => {
-              toggleFlexDirection();
-              setShowContextMenu(false);
-            }}
-          >
-            Toggle FlexDirection
-          </div>
-          <div
-            style={{ cursor: "pointer" }}
-            onClick={async () => {
-              await handleOutputAsMarkdown();
-              setShowContextMenu(false);
-            }}
-          >
-            Output As Markdown
-          </div>
-        </div>
-      )}
+      <TrayContextMenu
+        targetTray={tray}
+        showContextMenu={showContextMenu}
+        onCloseMenu={() => setShowContextMenu(false)}
+        onToggleFlexDirection={toggleFlexDirection}
+        onOutputAsMarkdown={handleOutputAsMarkdown}
+        onUpdate={onUpdate}
+        loadtray={loadTray}
+        containerRef={containerRef}
+        setIsTagEditing={setTagEditing}
+        setIsWatchTagEditing={setWatchTagEditing}
+        setIsUUidInpuing={setIsUuidInputing}
+      />
     </>
   );
 };

@@ -2,8 +2,8 @@
 import { App, TFile } from "obsidian";
 import { Tray } from "./trayModel";
 
-const TRAY_FOLDER = "trays";
-
+export const TRAY_FOLDER = "trays";
+import { tagMapping } from "./tagManager";
 
 
 
@@ -36,7 +36,9 @@ export async function loadTrayFromNote(app: App, uuid: string): Promise<Tray | n
   }
   const content = await app.vault.read(file);
   try {
+    // const preTray = JSON.parse
     const tray = JSON.parse(content) as Tray;
+
 
     return tray;
   } catch (e) {
