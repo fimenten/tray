@@ -92,6 +92,9 @@ const TrayComponent: React.FC<Props> = ({
   setNowFocusPath,
   parentPath,
 }) => {
+  const circular = parentPath.includes(tray.uuid)
+  console.log(circular)
+  if (circular){return}
   /** Build a path from parent -> current */
   const myPath = useMemo(() => {
     return parentPath ? [...parentPath, tray.uuid] : [tray.uuid];
@@ -113,6 +116,9 @@ const TrayComponent: React.FC<Props> = ({
 
   const titleRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+
+
 
   const isFocused = useMemo(
     () => arraysEqual(focusPath, myPath),
@@ -154,7 +160,10 @@ const TrayComponent: React.FC<Props> = ({
     // フォーカスすべきタイミングでフォーカス
     if (isFocused) {
       containerRef.current?.focus();
+    }else{
+      setIsEditing(false)
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFocused]); // init ではなく isFocused のみ依存
 
