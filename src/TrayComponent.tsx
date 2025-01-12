@@ -19,6 +19,7 @@ import {
   importTraySubtree,
   trayFixingFamilyProblem,
 } from "./otherStuff";
+import { parseMarkdownToTrays } from "./ByMarkdown";
 import { useKeyboardInteraction } from "./keyboardInteraction";
 import { TrayContextMenu } from "./contextMenu";
 import { onUpdateTags, tagMapping } from "./tagManager";
@@ -402,17 +403,39 @@ const TrayComponent: React.FC<Props> = ({
   }, [tray, loadTray]);
 
   const deepPasteTray = useCallback(async () => {
-    await trayFixingFamilyProblem(tray, loadTray, onUpdate);
+    // await trayFixingFamilyProblem(tray, loadTray, onUpdate);
     await handleDeepPasteTray(tray, loadTray, onChildUpdate, onUpdate);
   }, [tray, loadTray, onChildUpdate, onUpdate]);
 
   /** シングル(単純)ペースト */
-  const pastTray = useCallback(
-    (str: string) => {
-      const t = JSON.parse(str) as Tray;
-      onChildUpdate(t);
+  // const pastTray = useCallback(
+  //   (str: string) => {
+  //     const t = JSON.parse(str) as Tray;
+  //     onChildUpdate(t);
+  //     updateTray({
+  //       children: [t.uuid, ...tray.children],
+  //       isFolded: false,
+  //       editingStart: false,
+  //     });
+  //   },
+  //   [onChildUpdate, tray.children, updateTray]
+  // );
+
+  /** Markdownペースト */
+  const pasteMarkdown = useCallback(
+    async (markdown: string) => {
+      const trays = parseMarkdownToTrays(markdown);
+      if (trays.length === 0) return;
+      
+      // Update parent tray with new children
+      const newChildren = [...tray.children];
+      for (const t of trays) {
+        await onChildUpdate(t);
+        newChildren.push(t.uuid);
+      }
+      
       updateTray({
-        children: [t.uuid, ...tray.children],
+        children: newChildren,
         isFolded: false,
         editingStart: false,
       });
@@ -530,6 +553,7 @@ const TrayComponent: React.FC<Props> = ({
     shallowCopyTray,
     deepCopyTray,
     deepPasteTray,
+    pasteMarkdown,
   });
 
   /** Context menu 関連 */

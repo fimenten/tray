@@ -17,6 +17,7 @@ interface KeyboardInteractionProps {
   shallowCopyTray: () => void;
   deepCopyTray: () => Promise<void>;
   deepPasteTray: () => Promise<void>;
+  pasteMarkdown: (markdown: string) => Promise<void>;
   // openTagWindow:()=> void;
 }
 
@@ -38,10 +39,11 @@ export const useKeyboardInteraction = ({
   shallowCopyTray,
   deepCopyTray,
   deepPasteTray,
+  pasteMarkdown,
   // openTagWindow
 }: KeyboardInteractionProps) => {
   const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
+    async (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (!isFocused) return;
 
       const e = event as unknown as KeyboardEvent;
@@ -112,8 +114,15 @@ export const useKeyboardInteraction = ({
           break;
         case "v":
           if (e.ctrlKey) {
-            e.preventDefault();
-            deepPasteTray();
+            console.log("v")
+            if (e.shiftKey) {
+              e.preventDefault();
+              const markdown = await navigator.clipboard.readText();
+              pasteMarkdown(markdown);
+            } else {
+              e.preventDefault();
+              deepPasteTray();
+            }
           }
           break;
         case "t":
@@ -147,6 +156,7 @@ export const useKeyboardInteraction = ({
       shallowCopyTray,
       deepCopyTray,
       deepPasteTray,
+      pasteMarkdown,
     ]
   );
 

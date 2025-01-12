@@ -72,6 +72,7 @@ export const importTraySubtree = async (
 ): Promise<Tray | null> => {
   try {
     const trays = JSON.parse(subtreeData) as Tray[];
+    console.log(trays)
     if (!Array.isArray(trays) || trays.length === 0) return null;
     let newTrays;
     if (trays.length==1&&trays[0].children.length!=0)
@@ -129,8 +130,54 @@ export const handleDeepPasteTray = async (
   onChildUpdate: (child: Tray) => Promise<void>,
   onUpdate: (updatedTray: Tray) => void
 ) => {
-  const data = await navigator.clipboard.readText();
-  await importTraySubtree(data, onChildUpdate, tray, onUpdate);
+  try {
+    // Check if clipboard API is available
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      console.error('Clipboard API not available');
+      return;
+    }
+
+    // Read clipboard data
+    const data = await navigator.clipboard.readText();
+    if (!data) {
+      console.error('Clipboard is empty or contains no text data');
+      return;
+    }
+
+    // Validate and import data
+    try {
+      await importTraySubtree(data, onChildUpdate, tray, onUpdate);
+    } catch (error) {
+      console.error('Failed to paste tray data:', error);
+      // Try to paste as plain text if JSON parsing fails
+      if (error instanceof SyntaxError) {
+        console.log('Attempting to paste as plain text...');
+        const plainTextTray: Tray = {
+          uuid: crypto.randomUUID(),
+          name: data,
+          isFolded: false,
+          borderColor: '#ccc',
+          children: [],
+          lastModified: Date.now(),
+          metaData: {},
+          parentUuid: [tray.uuid],
+          main: null,
+          flexDirection: 'column',
+          editingStart: true,
+          tags: [],
+          watchTags: [],
+        };
+        await onChildUpdate(plainTextTray);
+        onUpdate({
+          ...tray,
+          children: [plainTextTray.uuid, ...tray.children],
+          isFolded: false,
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Clipboard access failed:', error);
+  }
 };
 
 export const trayFixingFamilyProblem = async (

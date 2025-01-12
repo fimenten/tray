@@ -5,6 +5,10 @@ import json
 import os
 import time
 
+
+
+
+
 def normalize_tray(data: dict) -> dict:
     """
     Ensures 'data' has the shape of our updated Tray interface.
@@ -121,4 +125,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    with open("past2",mode="r") as f:
+        d = json.load(f)
+    data = normalize_tray(d)
+    print(data)

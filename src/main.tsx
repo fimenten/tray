@@ -40,6 +40,7 @@ function TrayRootView({ app }: { app: App }) {
         await saveTrayToNote(app, loaded);
       }
       setTray(loaded);
+      console.log("test")
       // setFocusUuid(loaded.uuid);
     })();
   }, [app]);
