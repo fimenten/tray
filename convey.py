@@ -29,7 +29,7 @@ def convey(d:dict,ds:list):
         return ds
 import uuid
 if __name__ =="__main__":
-    with open("past2",mode="r") as f:
+    with open("data/past2",mode="r") as f:
         s = f.read()
     # print(s)
     # print(convey(json.loads(s),[]))
@@ -38,10 +38,10 @@ if __name__ =="__main__":
     ids = [d["uuid"] for d in ds]
     mapping = {str(i):str(uuid.uuid4()) for i in ids}
     dds = []
-    for d in ds:
-        d["uuid"] = mapping[d["uuid"]]
+    # for d in ds:
+        # d["uuid"] = mapping[d["uuid"]]
         # d["children"] = [mapping[str(c)] for c in d["children"]]
         # d["parentUuid"] = [mapping[str(c)] for c in d["parentUuid"]]
-        dds.append(d)
-    print(json.dumps(dds,ensure_ascii=False))
+        # dds.append(d)
+    print(json.dumps(ds,ensure_ascii=False))
     

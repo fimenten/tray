@@ -54,10 +54,21 @@ export const reassignUuidsAndTimestamps = (trays: Tray[]): Tray[] => {
       editingStart: false,
     };
   });
+  // console.log(newTrays)
 
   newTrays.forEach((t) => {
-    t.children = t.children.map((childUuid) => uuidMap.get(childUuid) || childUuid);
-    t.parentUuid = t.parentUuid?.map((p) => uuidMap.get(p) || p);
+    if (t.children){
+      t.children = t.children.map((childUuid) => uuidMap.get(childUuid) || childUuid);
+    }
+    else{
+      t.children = []
+    }
+    if (t.parentUuid){
+      t.parentUuid = t.parentUuid?.map((p) => uuidMap.get(p) || p);
+    }
+    else{
+      t.parentUuid = []
+    }
   });
 
   return newTrays;
