@@ -1,0 +1,6 @@
+[submodule "client"]
+	path = client
+	url = https://github.com/fimenten/Cray.github.io.git
+[submodule "server"]
+	path = server
+	url = https://github.com/fimenten/cray_server.git
